@@ -7,13 +7,19 @@ set(PROJECT_SOURCE_DIR src)
 find_package(OpenCV REQUIRED)
 
 #include_directories( ${OpenCV_INCLUDE_DIRS}  include )
-add_compile_options(-Ofast)
+#add_compile_options(-Ofast)
 include_directories(include)
 
 file(GLOB SOURCES
     ${PROJECT_SOURCE_DIR}/*.h
     ${PROJECT_SOURCE_DIR}/*.cc
 )
+
+find_library(CUDART_LIBRARY cudart ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(NVJPEG_LIBRARY nvjpeg ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(NPPIG_LIBRARY nppig ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(NPPC_LIBRARY nppc ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
+find_library(CULIBOS culibos ${CMAKE_CUDA_IMPLICIT_LINK_DIRECTORIES})
 
 # setup CUDA
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cuda")
@@ -69,10 +75,11 @@ add_custom_target(uninstall
 
 install(TARGETS ${PROJECT_NAME} 
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/flysense-jetson-cam
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} jetson-utils cuda cudart /usr/lib/aarch64-linux-gnu/tegra/libnvjpeg.so
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} jetson-utils cuda cudart /usr/lib/aarch64-linux-gnu/tegra/libnvjpeg.so 
 #gpujpeg
+#${CUDART_LIBRARY} ${NVJPEG_LIBRARY} ${NPPIG_LIBRARY} ${NPPC_LIBRARY} ${CULIBOS}
 )
