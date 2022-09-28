@@ -6,8 +6,12 @@
 #include <jetson-utils/videoSource.h>
 #include <jetson-utils/videoOutput.h>
 #include <jetson-utils/cudaResize.h>
+#include <jetson-utils/cudaOverlay.h>
+
+#include <jetson-utils/cudaRGB.h>
 #include <jetson-utils/cudaYUV.h>
 #include <jetson-utils/imageIO.h>
+#include <jetson-utils/imageFormat.h>
 #include <jetson-utils/cudaMappedMemory.h>
 #include <chrono>
 #include <sstream>
@@ -18,6 +22,12 @@
 #include "NvBuffer.h"
 #include "NvUtils.h"
 #include "NvJpegEncoder.h"
+
+#include <chrono>
+using std::chrono::duration;
+using std::chrono::duration_cast;
+using std::chrono::high_resolution_clock;
+using std::chrono::milliseconds;
 
 //#include <libgpujpeg/gpujpeg.h>
 
@@ -84,7 +94,22 @@ namespace flysense
                 }
 
                 cv::cuda::GpuMat gpu_frame(cv::Size(_cam->GetWidth(), _cam->GetHeight()), CV_8UC3, (void *)image);
-                dst = gpu_frame;
+                //  dst = gpu_frame;
+                cv::Size downscale(1920, 1080);
+
+                dst = cv::cuda::GpuMat(downscale, CV_8UC3);
+
+                cv::cuda::resize(gpu_frame, dst, downscale);
+
+                // uchar3 *resizedPtr = 0;
+                // cudaAllocMapped((void **)&resizedPtr, downscale.width * downscale.height * sizeof(uchar3));
+                // cudaResize(image, _cam->GetWidth(), _cam->GetHeight(), resizedPtr, downscale.width, downscale.height);
+
+                // cv::cuda::GpuMat gpu_frame(cv::Size(downscale.width, downscale.height), CV_8UC3, (void *)resizedPtr);
+                // gpu_frame.copyTo(dst);
+                // CUDA_FREE_HOST(image);
+                //  CUDA_FREE_HOST(resizedPtr);
+
                 return true;
             }
 
@@ -126,6 +151,9 @@ namespace flysense
                 }
 
                 mScreen = (void *)writer;
+
+                screenSized = cv::cuda::GpuMat(cv::Size(mWidth, mHeight), CV_8UC3);
+                screenSizedRGB = cv::cuda::GpuMat(cv::Size(mWidth, mHeight), CV_8UC3);
             }
 
             void Screen::render(cv::cuda::GpuMat &image)
@@ -135,9 +163,19 @@ namespace flysense
                     return;
                 }
 
-                cv::VideoWriter *_screen = (cv::VideoWriter *)mScreen;
                 cv::Mat out;
-                image.download(out);
+                cv::VideoWriter *_screen = (cv::VideoWriter *)mScreen;
+                if (image.size().width != this->mWidth || image.size().height != this->mHeight)
+                {
+                    cv::cuda::resize(image, screenSized, cv::Size(mWidth, mHeight));
+                    cv::cuda::cvtColor(screenSized, screenSizedRGB, cv::COLOR_RGB2BGR);
+                }
+                else
+                {
+                    cv::cuda::cvtColor(image, screenSizedRGB, cv::COLOR_RGB2BGR);
+                }
+
+                screenSizedRGB.download(out);
                 _screen->write(out);
             }
 
@@ -165,6 +203,24 @@ namespace flysense
                 _cam->Close();
                 delete _cam;
                 _cam = 0;
+            }
+
+            void overlay(cv::cuda::GpuMat &in, cv::cuda::GpuMat &overlay)
+            {
+                uchar4 *rgbaPtr = 0;
+                cudaAllocMapped((void **)&rgbaPtr, in.size().width * in.size().height * sizeof(uchar4));
+                cudaRGB8ToRGBA8((uchar3 *)in.cudaPtr(), rgbaPtr, in.size().width, in.size().height);
+                // CUDA_FREE_HOST(rgbaPtr);
+                cudaOverlay((void *)overlay.cudaPtr(), overlay.size().width, overlay.size().height, (void *)rgbaPtr, in.size().width, in.size().height, imageFormat::IMAGE_RGBA8, 0, 0);
+
+                uchar3 *rgbPtr = 0;
+                cudaAllocMapped((void **)&rgbPtr, in.size().width * in.size().height * sizeof(uchar3));
+                cudaRGBA8ToRGB8(rgbaPtr, rgbPtr, in.size().width, in.size().height);
+
+                cv::cuda::GpuMat out(in.size(), CV_8UC3, rgbPtr);
+                CUDA_FREE_HOST(rgbaPtr);
+                out.copyTo(in);
+                CUDA_FREE_HOST(rgbPtr);
             }
 
             /**
@@ -225,8 +281,7 @@ namespace flysense
                 for (i = 0; i < buffer.n_planes; i++)
                 {
                     NvBuffer::NvBufferPlane &plane = buffer.planes[i];
-                    std::streamsize bytes_to_read =
-                        plane.fmt.bytesperpixel * plane.fmt.width;
+                    std::streamsize bytes_to_read = plane.fmt.bytesperpixel * plane.fmt.width;
                     data = (char *)plane.data;
                     plane.bytesused = 0;
                     for (j = 0; j < plane.fmt.height; j++)
@@ -297,8 +352,21 @@ namespace flysense
                         }
                         */
 
+            uchar *GPUJpgEncoder::EncodeRGBnv(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality, bool cudaColorI420)
+            {
+
+                return 0;
+            }
+
             uchar *GPUJpgEncoder::EncodeRGB(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality, bool cudaColorI420)
             {
+                cv::Size downscale(1920, 1080);
+                // cv::cuda::GpuMat resized(image.size(), CV_8UC3);
+                // cv::cuda::resize(image, resized, cv::Size(1600, 900));
+                // uchar3 *resizedPtr = 0;
+                // cudaAllocMapped((void **)&resizedPtr, downscale.width * downscale.height * sizeof(uchar3));
+                // cudaResize((uchar3 *)image.cudaPtr(), image.size().width, image.size().height, resizedPtr, downscale.width, downscale.height);
+                // cv::cuda::GpuMat resized(downscale, CV_8UC3, (void *)resizedPtr);
                 size_t w = image.size().width;
                 size_t h = image.size().height;
 
@@ -306,14 +374,15 @@ namespace flysense
                 char *yuv_data = 0;
 
                 cv::Mat cpu_img_yuv(image.size(), CV_8UC1);
+                auto start_encode = high_resolution_clock::now();
                 if (cudaColorI420)
                 {
                     void *i420_out = 0;
                     uchar3 *inp = (uchar3 *)image.ptr();
 
-                    cudaAllocMapped((void **)&i420_out, w * h * 3 / 2);
+                    cudaAllocMapped((void **)&i420_out, w * h);
 
-                    if (CUDA_FAILED(cudaRGBToI420(inp, i420_out, w, h)))
+                    if (CUDA_FAILED(cudaRGBToI420(inp, i420_out, w, h * 3 / 2)))
                     {
                         std::cout << "failed color conv\n";
                         return 0;

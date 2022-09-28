@@ -42,6 +42,9 @@ namespace flysense
                 size_t mHeight;
                 size_t mFps;
 
+                cv::cuda::GpuMat screenSized;
+                cv::cuda::GpuMat screenSizedRGB;
+
                 void *mScreen;
             };
 
@@ -51,11 +54,14 @@ namespace flysense
                 virtual ~GPUJpgEncoder();
                 GPUJpgEncoder();
                 uchar *EncodeRGB(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality = 75, bool cudaColorI420 = false);
+                uchar *EncodeRGBnv(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality = 75, bool cudaColorI420 = false);
 
             private:
                 void *cinfo;
                 void *jerr;
             };
+
+            void overlay(cv::cuda::GpuMat &in, cv::cuda::GpuMat &overlay);
 
             // int EncodeJpg(cv::cuda::GpuMat &image, uint8_t *image_compressed, int *image_compressed_size, int quality);
 
