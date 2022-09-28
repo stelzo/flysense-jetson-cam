@@ -73,4 +73,6 @@ install(TARGETS ${PROJECT_NAME}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 )
 
-target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} jetson-utils cuda cudart /usr/lib/aarch64-linux-gnu/tegra/libnvjpeg.so gpujpeg)
+target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} jetson-utils cuda cudart /usr/lib/aarch64-linux-gnu/tegra/libnvjpeg.so
+#gpujpeg
+)

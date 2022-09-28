@@ -19,7 +19,7 @@
 #include "NvUtils.h"
 #include "NvJpegEncoder.h"
 
-#include <libgpujpeg/gpujpeg.h>
+//#include <libgpujpeg/gpujpeg.h>
 
 namespace flysense
 {
@@ -200,9 +200,9 @@ namespace flysense
 
             GPUJpgEncoder::~GPUJpgEncoder()
             {
-                jpeg_destroy_compress(&cinfo);
-                delete cinfo;
-                delete jerr;
+                jpeg_destroy_compress((struct jpeg_compress_struct *)cinfo);
+                delete (struct jpeg_compress_struct *)cinfo;
+                delete (struct jpeg_error_mgr *)jerr;
             }
 
             GPUJpgEncoder::GPUJpgEncoder()
@@ -211,10 +211,10 @@ namespace flysense
                 jerr = new struct jpeg_error_mgr;
                 memset(cinfo, 0, sizeof(struct jpeg_compress_struct));
                 memset(jerr, 0, sizeof(struct jpeg_error_mgr));
-                cinfo.err = jpeg_std_error(jerr);
+                ((struct jpeg_compress_struct *)cinfo)->err = jpeg_std_error((struct jpeg_error_mgr *)jerr);
 
-                jpeg_create_compress(cinfo);
-                jpeg_suppress_tables(cinfo, TRUE);
+                jpeg_create_compress((struct jpeg_compress_struct *)cinfo);
+                jpeg_suppress_tables((struct jpeg_compress_struct *)cinfo, TRUE);
             }
 
             bool read_video_frame(const char *inpBuf, unsigned inpBufLen, NvBuffer &buffer)
@@ -249,52 +249,53 @@ namespace flysense
                 }
                 return true;
             }
+            /*
+                        int encodeJpg(cv::cuda::GpuMat &image, uint8_t *image_compressed, int *image_compressed_size, int quality)
+                        {
+                            struct gpujpeg_parameters param;
+                            gpujpeg_set_default_parameters(&param);
+                            param.quality = 80;
+                            param.restart_interval = 16;
+                            param.interleaved = 0;
 
-            int encodeJpg(cv::cuda::GpuMat &image, uint8_t *image_compressed, int *image_compressed_size, int quality)
-            {
-                struct gpujpeg_parameters param;
-                gpujpeg_set_default_parameters(&param);
-                param.quality = 80;
-                param.restart_interval = 16;
-                param.interleaved = 0;
+                            struct gpujpeg_image_parameters param_image;
+                            gpujpeg_image_set_default_parameters(&param_image);
+                            param_image.width = image.size().width;
+                            param_image.height = image.size().height;
+                            param_image.comp_count = 3;
+                            param_image.color_space = GPUJPEG_RGB;
+                            param_image.pixel_format = GPUJPEG_444_U8_P012;
 
-                struct gpujpeg_image_parameters param_image;
-                gpujpeg_image_set_default_parameters(&param_image);
-                param_image.width = image.size().width;
-                param_image.height = image.size().height;
-                param_image.comp_count = 3;
-                param_image.color_space = GPUJPEG_RGB;
-                param_image.pixel_format = GPUJPEG_444_U8_P012;
+                            int device_id = 0;
+                            int verbose_init = 0; // or GPUJPEG_VERBOSE
 
-                int device_id = 0;
-                int verbose_init = 0; // or GPUJPEG_VERBOSE
+                            if (gpujpeg_init_device(device_id, verbose_init))
+                            {
+                                return -1;
+                            }
 
-                if (gpujpeg_init_device(device_id, verbose_init))
-                {
-                    return -1;
-                }
+                            struct gpujpeg_encoder *encoder = gpujpeg_encoder_create(0);
+                            if (encoder == NULL)
+                            {
+                                return -1;
+                            }
 
-                struct gpujpeg_encoder *encoder = gpujpeg_encoder_create(0);
-                if (encoder == NULL)
-                {
-                    return -1;
-                }
+                            cv::Mat cpu_img_rgb;
+                            image.download(cpu_img_rgb);
 
-                cv::Mat cpu_img_rgb;
-                image.download(cpu_img_rgb);
+                            struct gpujpeg_encoder_input encoder_input;
+                            encoder_input.type = gpujpeg_encoder_input_type::GPUJPEG_ENCODER_INPUT_GPU_IMAGE;
+                            encoder_input.image = cpu_img_rgb.data;
 
-                struct gpujpeg_encoder_input encoder_input;
-                encoder_input.type = gpujpeg_encoder_input_type::GPUJPEG_ENCODER_INPUT_GPU_IMAGE;
-                encoder_input.image = cpu_img_rgb.data;
+                            if (gpujpeg_encoder_encode(encoder, &param, &param_image, &encoder_input, &image_compressed,
+                                                       image_compressed_size) != 0)
+                            {
+                                return -1;
+                            }
 
-                if (gpujpeg_encoder_encode(encoder, &param, &param_image, &encoder_input, &image_compressed,
-                                           image_compressed_size) != 0)
-                {
-                    return -1;
-                }
-
-                return 0;
-            }
+                            return 0;
+                        }
+                        */
 
             uchar *GPUJpgEncoder::EncodeRGB(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality, bool cudaColorI420)
             {
@@ -305,7 +306,7 @@ namespace flysense
                 char *yuv_data = 0;
 
                 cv::Mat cpu_img_yuv(image.size(), CV_8UC1);
-                if (cuda_color_i420)
+                if (cudaColorI420)
                 {
                     void *i420_out = 0;
                     uchar3 *inp = (uchar3 *)image.ptr();
@@ -337,7 +338,7 @@ namespace flysense
                     return 0;
                 }
 
-                if (cuda_color_i420)
+                if (cudaColorI420)
                 {
                     delete[] yuv_data;
                 }
