@@ -5,8 +5,6 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/cuda.hpp>
 
-#include "jpeglib.h"
-
 namespace flysense
 {
     namespace jetson
@@ -55,8 +53,8 @@ namespace flysense
                 uchar *EncodeRGB(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality = 75, bool cudaColorI420 = false);
 
             private:
-                struct jpeg_compress_struct cinfo;
-                struct jpeg_error_mgr jerr;
+                void *cinfo;
+                void *jerr;
             };
 
             // int EncodeJpg(cv::cuda::GpuMat &image, uint8_t *image_compressed, int *image_compressed_size, int quality);

@@ -201,16 +201,20 @@ namespace flysense
             GPUJpgEncoder::~GPUJpgEncoder()
             {
                 jpeg_destroy_compress(&cinfo);
+                delete cinfo;
+                delete jerr;
             }
 
             GPUJpgEncoder::GPUJpgEncoder()
             {
-                memset(&cinfo, 0, sizeof(cinfo));
-                memset(&jerr, 0, sizeof(jerr));
-                cinfo.err = jpeg_std_error(&jerr);
+                cinfo = new struct jpeg_compress_struct;
+                jerr = new struct jpeg_error_mgr;
+                memset(cinfo, 0, sizeof(struct jpeg_compress_struct));
+                memset(jerr, 0, sizeof(struct jpeg_error_mgr));
+                cinfo.err = jpeg_std_error(jerr);
 
-                jpeg_create_compress(&cinfo);
-                jpeg_suppress_tables(&cinfo, TRUE);
+                jpeg_create_compress(cinfo);
+                jpeg_suppress_tables(cinfo, TRUE);
             }
 
             bool read_video_frame(const char *inpBuf, unsigned inpBufLen, NvBuffer &buffer)
