@@ -15,7 +15,7 @@ namespace flysense
             {
             public:
                 virtual ~Camera();
-                Camera(size_t width, size_t height, size_t fps, int idx);
+                Camera(cv::Size sensorSize, size_t fps, int idx, cv::Size downscale);
 
                 bool getNextImageRGB(cv::cuda::GpuMat &dst, uint64_t &timestamp);
                 bool getNextImageBGR(cv::cuda::GpuMat &dst, uint64_t &timestamp);
@@ -27,13 +27,16 @@ namespace flysense
                 int mIdx;
 
                 void *mCam;
+
+                cv::cuda::GpuMat incoming;
+                cv::Size downscale;
             };
 
             class Screen
             {
             public:
                 virtual ~Screen();
-                Screen(size_t width, size_t height, size_t fps);
+                Screen(cv::Size size, size_t fps);
 
                 void render(cv::cuda::GpuMat &image);
 
@@ -52,13 +55,22 @@ namespace flysense
             {
             public:
                 virtual ~GPUJpgEncoder();
-                GPUJpgEncoder();
+                GPUJpgEncoder(int w, int h, int quality);
                 uchar *EncodeRGB(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality = 75, bool cudaColorI420 = false);
                 uchar *EncodeRGBnv(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality = 75, bool cudaColorI420 = false);
 
             private:
                 void *cinfo;
                 void *jerr;
+
+                void *nppiEncoder;
+
+                void *i420_out;
+                char *yuv_data;
+
+                int w, h;
+
+                void *nvbuf;
             };
 
             void overlay(cv::cuda::GpuMat &in, cv::cuda::GpuMat &overlay);

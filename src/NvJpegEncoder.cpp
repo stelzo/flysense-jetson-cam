@@ -31,6 +31,12 @@
 #include <string.h>
 #include <malloc.h>
 
+#include <chrono>
+using std::chrono::duration;
+using std::chrono::duration_cast;
+using std::chrono::high_resolution_clock;
+using std::chrono::milliseconds;
+
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define ROUND_UP_4(num) (((num) + 3) & ~3)
 
@@ -124,6 +130,7 @@ int NvJPEGEncoder::encodeFromBuffer(NvBuffer &buffer, J_COLOR_SPACE color_space,
                                     unsigned char **out_buf, unsigned long &out_buf_size,
                                     int quality)
 {
+    auto start_encode = high_resolution_clock::now();
     unsigned char **line[3];
 
     uint32_t comp_height[MAX_CHANNELS];
@@ -141,9 +148,9 @@ int NvJPEGEncoder::encodeFromBuffer(NvBuffer &buffer, J_COLOR_SPACE color_space,
     uint32_t height;
 
     uint32_t i, j, k;
-    uint32_t buffer_id;
+    // uint32_t buffer_id;
 
-    buffer_id = profiler.startProcessing();
+    // buffer_id = profiler.startProcessing();
 
     jpeg_mem_dest(&cinfo, out_buf, &out_buf_size);
     width = buffer.planes[0].fmt.width;
@@ -250,6 +257,7 @@ int NvJPEGEncoder::encodeFromBuffer(NvBuffer &buffer, J_COLOR_SPACE color_space,
         return -1;
     }
 
+    auto end_encode = high_resolution_clock::now();
     for (i = 0; i < height; i += v_max_samp * DCTSIZE)
     {
         for (k = 0; k < channels; k++)
@@ -269,9 +277,13 @@ int NvJPEGEncoder::encodeFromBuffer(NvBuffer &buffer, J_COLOR_SPACE color_space,
     {
         free(line[i]);
     }
+
+    auto end_all = high_resolution_clock::now();
     COMP_DEBUG_MSG("Succesfully encoded Buffer");
 
-    profiler.finishProcessing(buffer_id, false);
+    // profiler.finishProcessing(buffer_id, false);
+    std::cout << "prepare " << duration_cast<milliseconds>(end_encode - start_encode).count() << "ms\n";
+    std::cout << "hw enc " << duration_cast<milliseconds>(end_all - end_encode).count() << "ms\n";
 
     return 0;
 }

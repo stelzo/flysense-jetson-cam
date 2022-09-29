@@ -59,6 +59,7 @@ add_library(${PROJECT_NAME} SHARED
     ${PROJECT_SOURCE_DIR}/NvLogging.cpp
     ${PROJECT_SOURCE_DIR}/NvElement.cpp
     ${PROJECT_SOURCE_DIR}/NvElementProfiler.cpp
+    ${PROJECT_SOURCE_DIR}/NPPJpegCoder.cc
 )
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
@@ -82,4 +83,16 @@ install(TARGETS ${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} jetson-utils cuda cudart /usr/lib/aarch64-linux-gnu/tegra/libnvjpeg.so 
 #gpujpeg
 #${CUDART_LIBRARY} ${NVJPEG_LIBRARY} ${NPPIG_LIBRARY} ${NPPC_LIBRARY} ${CULIBOS}
+${CUDA_npp_LIBRARY} 
+	${CUDA_nppc_LIBRARY} 
+    ${CUDA_nppicc_LIBRARY}
+    ${CUDA_nppicom_LIBRARY}
+	${CUDA_nppidei_LIBRARY}
+	${CUDA_nppif_LIBRARY}
+	${CUDA_nppig_LIBRARY}
+	${CUDA_nppim_LIBRARY}
+	${CUDA_nppist_LIBRARY}
+	${CUDA_nppisu_LIBRARY}
+	${CUDA_nppitc_LIBRARY}
+	${CUDA_npps_LIBRARY} 
 )
