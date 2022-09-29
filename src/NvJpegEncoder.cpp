@@ -130,7 +130,7 @@ int NvJPEGEncoder::encodeFromBuffer(NvBuffer &buffer, J_COLOR_SPACE color_space,
                                     unsigned char **out_buf, unsigned long &out_buf_size,
                                     int quality)
 {
-    auto start_encode = high_resolution_clock::now();
+    // auto start_encode = high_resolution_clock::now();
     unsigned char **line[3];
 
     uint32_t comp_height[MAX_CHANNELS];
@@ -257,7 +257,7 @@ int NvJPEGEncoder::encodeFromBuffer(NvBuffer &buffer, J_COLOR_SPACE color_space,
         return -1;
     }
 
-    auto end_encode = high_resolution_clock::now();
+    // auto end_encode = high_resolution_clock::now();
     for (i = 0; i < height; i += v_max_samp * DCTSIZE)
     {
         for (k = 0; k < channels; k++)
@@ -278,12 +278,12 @@ int NvJPEGEncoder::encodeFromBuffer(NvBuffer &buffer, J_COLOR_SPACE color_space,
         free(line[i]);
     }
 
-    auto end_all = high_resolution_clock::now();
+    // auto end_all = high_resolution_clock::now();
     COMP_DEBUG_MSG("Succesfully encoded Buffer");
 
     // profiler.finishProcessing(buffer_id, false);
-    std::cout << "prepare " << duration_cast<milliseconds>(end_encode - start_encode).count() << "ms\n";
-    std::cout << "hw enc " << duration_cast<milliseconds>(end_all - end_encode).count() << "ms\n";
+    // std::cout << "prepare " << duration_cast<milliseconds>(end_encode - start_encode).count() << "ms\n";
+    // std::cout << "hw enc " << duration_cast<milliseconds>(end_all - end_encode).count() << "ms\n";
 
     return 0;
 }

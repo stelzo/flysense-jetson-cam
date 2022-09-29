@@ -15,7 +15,7 @@ namespace flysense
             {
             public:
                 virtual ~Camera();
-                Camera(cv::Size sensorSize, size_t fps, int idx, cv::Size downscale);
+                Camera(cv::Size sensorSize, size_t fps, int idx, cv::Size downscale, cv::Mat cameraMatrix, cv::Mat distortCoeffs);
 
                 bool getNextImageRGB(cv::cuda::GpuMat &dst, uint64_t &timestamp);
                 bool getNextImageBGR(cv::cuda::GpuMat &dst, uint64_t &timestamp);
@@ -66,7 +66,6 @@ namespace flysense
                 void *nppiEncoder;
 
                 void *i420_out;
-                char *yuv_data;
 
                 int w, h;
 

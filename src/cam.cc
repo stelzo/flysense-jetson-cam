@@ -39,7 +39,7 @@ namespace flysense
     {
         namespace camera
         {
-            Camera::Camera(cv::Size sensorSize, size_t fps, int idx, cv::Size downscale) : mWidth(sensorSize.width), mHeight(sensorSize.height), mFps(fps), mIdx(idx), downscale(downscale)
+            Camera::Camera(cv::Size sensorSize, size_t fps, int idx, cv::Size downscale, cv::Mat cameraMatrix, cv::Mat distortCoeffs) : mWidth(sensorSize.width), mHeight(sensorSize.height), mFps(fps), mIdx(idx), downscale(downscale)
             {
                 videoOptions cam_options;
                 cam_options.width = mWidth;
@@ -189,7 +189,7 @@ namespace flysense
 
                 cv::VideoWriter *_screen = (cv::VideoWriter *)mScreen;
                 _screen->release();
-                delete _screen;
+                SAFE_DELETE(_screen);
                 _screen = 0;
             }
 
@@ -202,7 +202,7 @@ namespace flysense
 
                 videoSource *_cam = (videoSource *)mCam;
                 _cam->Close();
-                delete _cam;
+                SAFE_DELETE(_cam);
                 _cam = 0;
             }
 
@@ -257,13 +257,20 @@ namespace flysense
 
             GPUJpgEncoder::~GPUJpgEncoder()
             {
-                jpeg_destroy_compress((struct jpeg_compress_struct *)cinfo);
-                delete (struct jpeg_compress_struct *)cinfo;
-                delete (struct jpeg_error_mgr *)jerr;
+                if (cinfo != 0)
+                {
+                    jpeg_destroy_compress((struct jpeg_compress_struct *)cinfo);
+                    auto _cinfo = (struct jpeg_compress_struct *)cinfo;
+                    SAFE_DELETE(_cinfo);
+                }
+
+                auto _jerr = (struct jpeg_error_mgr *)jerr;
+                SAFE_DELETE(_jerr);
+
                 ((npp::NPPJpegCoder *)nppiEncoder)->release();
-                delete (npp::NPPJpegCoder *)nppiEncoder;
+                auto _nppiEncoder = (npp::NPPJpegCoder *)nppiEncoder;
+                SAFE_DELETE(_nppiEncoder);
                 CUDA_FREE_HOST(i420_out);
-                delete yuv_data;
             }
 
             GPUJpgEncoder::GPUJpgEncoder(int w, int h, int quality) : w(w), h(h)
@@ -283,8 +290,6 @@ namespace flysense
 
                 size_t yuv_data_size = w * h * 3 / 2;
                 cudaAllocMapped((void **)&i420_out, yuv_data_size);
-
-                yuv_data = new char[yuv_data_size];
             }
 
             bool read_video_frame(const char *inpBuf, unsigned inpBufLen, NvBuffer &buffer)
@@ -384,7 +389,7 @@ namespace flysense
                 uchar *jpegData = new uchar[jpegDataBufSize];
 
                 cv::cuda::Stream stream;
-                auto start_getnext = high_resolution_clock::now();
+                // auto start_getnext = high_resolution_clock::now();
 
                 int ret = encoder->encode(image, jpegData, &outBufSize, jpegDataBufSize, stream);
 
@@ -393,14 +398,18 @@ namespace flysense
                 {
                     std::cout << "error in encode" << std::endl;
                 }
-                auto end_getnext = high_resolution_clock::now();
-                std::cout << "encoded with nppi " << duration_cast<milliseconds>(end_getnext - start_getnext).count() << "ms\n";
+                // auto end_getnext = high_resolution_clock::now();
+                // std::cout << "encoded with nppi " << duration_cast<milliseconds>(end_getnext - start_getnext).count() << "ms\n";
 
                 return jpegData;
             }
 
             uchar *GPUJpgEncoder::EncodeRGB(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality, bool cudaColorI420)
             {
+                if (image.empty())
+                {
+                    return 0;
+                }
                 // cv::Size downscale(1920, 1080);
                 //  cv::cuda::GpuMat resized(image.size(), CV_8UC3);
                 //  cv::cuda::resize(image, resized, cv::Size(1600, 900));
@@ -410,6 +419,7 @@ namespace flysense
                 //  cv::cuda::GpuMat resized(downscale, CV_8UC3, (void *)resizedPtr);
 
                 size_t yuv_data_size = w * h * 3 / 2;
+                char *yuv_data = 0;
 
                 cv::Mat cpu_img_yuv(image.size(), CV_8UC1);
                 auto start_encode = high_resolution_clock::now();
@@ -428,13 +438,13 @@ namespace flysense
                 }
                 else
                 {
-                    auto start_encode = high_resolution_clock::now();
+                    // auto start_encode = high_resolution_clock::now();
                     cv::Mat cpu_img_rgb;
                     image.download(cpu_img_rgb);
                     cv::cvtColor(cpu_img_rgb, cpu_img_yuv, cv::COLOR_RGB2YUV_I420);
                     yuv_data = (char *)cpu_img_yuv.ptr();
-                    auto end_encode = high_resolution_clock::now();
-                    std::cout << "cpu conv " << duration_cast<milliseconds>(end_encode - start_encode).count() << "ms\n\n";
+                    // auto end_encode = high_resolution_clock::now();
+                    // std::cout << "cpu conv " << duration_cast<milliseconds>(end_encode - start_encode).count() << "ms\n\n";
                 }
 
                 NvBuffer nvbuf(V4L2_PIX_FMT_YUV420M, w, h, 0);
@@ -450,7 +460,7 @@ namespace flysense
 
                 std::unique_ptr<NvJPEGEncoder> jpgEnc(NvJPEGEncoder::createJPEGEncoder("jpegenc"));
                 ret = jpgEnc->encodeFromBuffer(nvbuf, JCS_YCbCr, &outBufLocal, outBufSize, quality);
-
+                yuv_data = 0;
                 return outBufLocal;
             }
         }
