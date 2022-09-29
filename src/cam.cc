@@ -23,6 +23,8 @@
 #include "NvUtils.h"
 #include "NvJpegEncoder.h"
 
+#include "NPPJpegCoder.h"
+
 #include <chrono>
 using std::chrono::duration;
 using std::chrono::duration_cast;
@@ -37,11 +39,11 @@ namespace flysense
     {
         namespace camera
         {
-            Camera::Camera(size_t width, size_t height, size_t fps, int idx) : mWidth(width), mHeight(height), mFps(fps), mIdx(idx)
+            Camera::Camera(cv::Size sensorSize, size_t fps, int idx, cv::Size downscale) : mWidth(sensorSize.width), mHeight(sensorSize.height), mFps(fps), mIdx(idx), downscale(downscale)
             {
                 videoOptions cam_options;
-                cam_options.width = width;
-                cam_options.height = height;
+                cam_options.width = mWidth;
+                cam_options.height = mHeight;
                 cam_options.frameRate = fps;
                 cam_options.deviceType = videoOptions::DeviceType::DEVICE_CSI;
                 cam_options.ioType = videoOptions::IoType::INPUT;
@@ -95,7 +97,6 @@ namespace flysense
 
                 cv::cuda::GpuMat gpu_frame(cv::Size(_cam->GetWidth(), _cam->GetHeight()), CV_8UC3, (void *)image);
                 //  dst = gpu_frame;
-                cv::Size downscale(1920, 1080);
 
                 dst = cv::cuda::GpuMat(downscale, CV_8UC3);
 
@@ -131,14 +132,14 @@ namespace flysense
                 return true;
             }
 
-            Screen::Screen(size_t width, size_t height, size_t fps) : mWidth(width), mHeight(height), mFps(fps)
+            Screen::Screen(cv::Size size, size_t fps) : mWidth(size.width), mHeight(size.height), mFps(fps)
             {
                 cv::VideoWriter *writer = new cv::VideoWriter(
                     "appsrc ! videoconvert ! video/x-raw,format=RGBA ! nvvidconv ! nvoverlaysink sync=false",
                     cv::CAP_GSTREAMER,
                     0,   // fourcc
                     fps, // fps
-                    cv::Size(width, height),
+                    cv::Size(mWidth, mHeight),
                     {
                         cv::VideoWriterProperties::VIDEOWRITER_PROP_IS_COLOR,
                         1,
@@ -152,8 +153,8 @@ namespace flysense
 
                 mScreen = (void *)writer;
 
-                screenSized = cv::cuda::GpuMat(cv::Size(mWidth, mHeight), CV_8UC3);
-                screenSizedRGB = cv::cuda::GpuMat(cv::Size(mWidth, mHeight), CV_8UC3);
+                screenSized = cv::cuda::GpuMat(size, CV_8UC3);
+                screenSizedRGB = cv::cuda::GpuMat(size, CV_8UC3);
             }
 
             void Screen::render(cv::cuda::GpuMat &image)
@@ -259,9 +260,13 @@ namespace flysense
                 jpeg_destroy_compress((struct jpeg_compress_struct *)cinfo);
                 delete (struct jpeg_compress_struct *)cinfo;
                 delete (struct jpeg_error_mgr *)jerr;
+                ((npp::NPPJpegCoder *)nppiEncoder)->release();
+                delete (npp::NPPJpegCoder *)nppiEncoder;
+                CUDA_FREE_HOST(i420_out);
+                delete yuv_data;
             }
 
-            GPUJpgEncoder::GPUJpgEncoder()
+            GPUJpgEncoder::GPUJpgEncoder(int w, int h, int quality) : w(w), h(h)
             {
                 cinfo = new struct jpeg_compress_struct;
                 jerr = new struct jpeg_error_mgr;
@@ -271,6 +276,15 @@ namespace flysense
 
                 jpeg_create_compress((struct jpeg_compress_struct *)cinfo);
                 jpeg_suppress_tables((struct jpeg_compress_struct *)cinfo, TRUE);
+
+                nppiEncoder = new npp::NPPJpegCoder();
+                npp::NPPJpegCoder *encoder = (npp::NPPJpegCoder *)nppiEncoder;
+                encoder->init(w, h, quality);
+
+                size_t yuv_data_size = w * h * 3 / 2;
+                cudaAllocMapped((void **)&i420_out, yuv_data_size);
+
+                yuv_data = new char[yuv_data_size];
             }
 
             bool read_video_frame(const char *inpBuf, unsigned inpBufLen, NvBuffer &buffer)
@@ -354,49 +368,73 @@ namespace flysense
 
             uchar *GPUJpgEncoder::EncodeRGBnv(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality, bool cudaColorI420)
             {
+                /*
+                cv::Mat cpu;
+                image.download(cpu);
+                Npp8u *rgb_img_d = cpu.data();
+                Npp8u *apDstImage[3];
 
-                return 0;
+                NPP_CHECK_NPP(nppiRGBToYUV420_8u_C3P3R(image.data, image.step, apDstImage, aDstImageStep,
+                                                       osize));
+                                                       */
+
+                npp::NPPJpegCoder *encoder = (npp::NPPJpegCoder *)nppiEncoder;
+
+                size_t jpegDataBufSize = image.size().width * image.size().height * 3;
+                uchar *jpegData = new uchar[jpegDataBufSize];
+
+                cv::cuda::Stream stream;
+                auto start_getnext = high_resolution_clock::now();
+
+                int ret = encoder->encode(image, jpegData, &outBufSize, jpegDataBufSize, stream);
+
+                stream.waitForCompletion();
+                if (ret != 0)
+                {
+                    std::cout << "error in encode" << std::endl;
+                }
+                auto end_getnext = high_resolution_clock::now();
+                std::cout << "encoded with nppi " << duration_cast<milliseconds>(end_getnext - start_getnext).count() << "ms\n";
+
+                return jpegData;
             }
 
             uchar *GPUJpgEncoder::EncodeRGB(cv::cuda::GpuMat &image, unsigned long &outBufSize, int quality, bool cudaColorI420)
             {
-                cv::Size downscale(1920, 1080);
-                // cv::cuda::GpuMat resized(image.size(), CV_8UC3);
-                // cv::cuda::resize(image, resized, cv::Size(1600, 900));
-                // uchar3 *resizedPtr = 0;
-                // cudaAllocMapped((void **)&resizedPtr, downscale.width * downscale.height * sizeof(uchar3));
-                // cudaResize((uchar3 *)image.cudaPtr(), image.size().width, image.size().height, resizedPtr, downscale.width, downscale.height);
-                // cv::cuda::GpuMat resized(downscale, CV_8UC3, (void *)resizedPtr);
-                size_t w = image.size().width;
-                size_t h = image.size().height;
+                // cv::Size downscale(1920, 1080);
+                //  cv::cuda::GpuMat resized(image.size(), CV_8UC3);
+                //  cv::cuda::resize(image, resized, cv::Size(1600, 900));
+                //  uchar3 *resizedPtr = 0;
+                //  cudaAllocMapped((void **)&resizedPtr, downscale.width * downscale.height * sizeof(uchar3));
+                //  cudaResize((uchar3 *)image.cudaPtr(), image.size().width, image.size().height, resizedPtr, downscale.width, downscale.height);
+                //  cv::cuda::GpuMat resized(downscale, CV_8UC3, (void *)resizedPtr);
 
                 size_t yuv_data_size = w * h * 3 / 2;
-                char *yuv_data = 0;
 
                 cv::Mat cpu_img_yuv(image.size(), CV_8UC1);
                 auto start_encode = high_resolution_clock::now();
                 if (cudaColorI420)
                 {
-                    void *i420_out = 0;
-                    uchar3 *inp = (uchar3 *)image.ptr();
-
-                    cudaAllocMapped((void **)&i420_out, w * h);
-
-                    if (CUDA_FAILED(cudaRGBToI420(inp, i420_out, w, h * 3 / 2)))
+                    if (CUDA_FAILED(cudaRGBToI420((uchar3 *)image.cudaPtr(), i420_out, w, h)))
                     {
                         std::cout << "failed color conv\n";
                         return 0;
                     }
-                    yuv_data = new char[yuv_data_size];
-                    memcpy(yuv_data, i420_out, yuv_data_size);
-                    CUDA_FREE_HOST(i420_out);
+
+                    yuv_data = (char *)i420_out;
+
+                    // cudaMemcpy(yuv_data, i420_out, yuv_data_size, cudaMemcpyDeviceToHost);
+                    //  memcpy(yuv_data, i420_out, yuv_data_size);
                 }
                 else
                 {
+                    auto start_encode = high_resolution_clock::now();
                     cv::Mat cpu_img_rgb;
                     image.download(cpu_img_rgb);
                     cv::cvtColor(cpu_img_rgb, cpu_img_yuv, cv::COLOR_RGB2YUV_I420);
                     yuv_data = (char *)cpu_img_yuv.ptr();
+                    auto end_encode = high_resolution_clock::now();
+                    std::cout << "cpu conv " << duration_cast<milliseconds>(end_encode - start_encode).count() << "ms\n\n";
                 }
 
                 NvBuffer nvbuf(V4L2_PIX_FMT_YUV420M, w, h, 0);
@@ -405,11 +443,6 @@ namespace flysense
                 if (ret < 0)
                 {
                     return 0;
-                }
-
-                if (cudaColorI420)
-                {
-                    delete[] yuv_data;
                 }
 
                 outBufSize = yuv_data_size;
