@@ -135,7 +135,7 @@ namespace flysense
             Screen::Screen(cv::Size size, size_t fps) : mWidth(size.width), mHeight(size.height), mFps(fps)
             {
                 cv::VideoWriter *writer = new cv::VideoWriter(
-                    "appsrc ! videoconvert ! video/x-raw,format=RGBA ! nvvidconv ! nvoverlaysink sync=false",
+                    "appsrc ! videoconvert ! video/x-raw,format=RGBA ! nvvidconv ! nvdrmvideosink sync=false",
                     cv::CAP_GSTREAMER,
                     0,   // fourcc
                     fps, // fps
