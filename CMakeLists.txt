@@ -6,6 +6,10 @@ set(PROJECT_SOURCE_DIR src)
 
 find_package(OpenCV REQUIRED)
 
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+)
+
 #include_directories( ${OpenCV_INCLUDE_DIRS}  include )
 #add_compile_options(-Ofast)
 include_directories(include)
@@ -81,6 +85,7 @@ install(TARGETS ${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} jetson-utils cuda cudart /usr/lib/aarch64-linux-gnu/tegra/libnvjpeg.so 
+${catkin_LIBRARIES}
 #gpujpeg
 #${CUDART_LIBRARY} ${NVJPEG_LIBRARY} ${NPPIG_LIBRARY} ${NPPC_LIBRARY} ${CULIBOS}
 ${CUDA_npp_LIBRARY} 

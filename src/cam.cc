@@ -25,13 +25,15 @@
 
 #include "NPPJpegCoder.h"
 
+#include <ros/ros.h>
+
 #include <chrono>
 using std::chrono::duration;
 using std::chrono::duration_cast;
 using std::chrono::high_resolution_clock;
 using std::chrono::milliseconds;
 
-//#include <libgpujpeg/gpujpeg.h>
+// #include <libgpujpeg/gpujpeg.h>
 
 namespace flysense
 {
@@ -114,7 +116,50 @@ namespace flysense
                 return true;
             }
 
-            bool Camera::getNextImageBGR(cv::cuda::GpuMat &dst, uint64_t &timestamp)
+            bool Camera::getNextImageRGB(cv::cuda::GpuMat &dst, ros::Time &timestamp)
+            {
+                if (mCam == nullptr)
+                {
+                    return false;
+                }
+
+                videoSource *_cam = (videoSource *)mCam;
+
+                uchar3 *image = NULL;
+                bool captured = _cam->Capture(&image, 10000);
+                if (!captured)
+                {
+                    return false;
+                }
+
+                timestamp = ros::Time(0);
+
+                if (!_cam->IsStreaming())
+                {
+                    return false;
+                }
+
+                cv::cuda::GpuMat gpu_frame(cv::Size(_cam->GetWidth(), _cam->GetHeight()), CV_8UC3, (void *)image);
+                //  dst = gpu_frame;
+
+                dst = cv::cuda::GpuMat(downscale, CV_8UC3);
+
+                cv::cuda::resize(gpu_frame, dst, downscale);
+
+                // uchar3 *resizedPtr = 0;
+                // cudaAllocMapped((void **)&resizedPtr, downscale.width * downscale.height * sizeof(uchar3));
+                // cudaResize(image, _cam->GetWidth(), _cam->GetHeight(), resizedPtr, downscale.width, downscale.height);
+
+                // cv::cuda::GpuMat gpu_frame(cv::Size(downscale.width, downscale.height), CV_8UC3, (void *)resizedPtr);
+                // gpu_frame.copyTo(dst);
+                // CUDA_FREE_HOST(image);
+                //  CUDA_FREE_HOST(resizedPtr);
+
+                return true;
+            }
+
+            template <typename T>
+            bool Camera::getNextImageBGR(cv::cuda::GpuMat &dst, T &timestamp)
             {
                 cv::cuda::GpuMat tmp;
                 bool ok = getNextImageRGB(tmp, timestamp);
